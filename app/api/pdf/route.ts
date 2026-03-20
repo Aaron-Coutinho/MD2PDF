@@ -5,18 +5,30 @@ import { buildPrintableDocument } from "@/lib/rendering";
 import { PdfRequestSchema } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: Request): Promise<NextResponse> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
     const parsed = PdfRequestSchema.parse(await request.json());
+    const isVercel = process.env.VERCEL === "1" || process.env.VERCEL === "true";
 
-    browser = await puppeteer.launch({
-      executablePath: resolveBrowserExecutablePath(),
-      headless: true,
-      args: []
-    });
+    if (isVercel) {
+      const chromium = (await import("@sparticuz/chromium")).default;
+
+      browser = await puppeteer.launch({
+        args: puppeteer.defaultArgs({ args: chromium.args, headless: "shell" }),
+        executablePath: await chromium.executablePath(),
+        headless: "shell"
+      });
+    } else {
+      browser = await puppeteer.launch({
+        executablePath: resolveBrowserExecutablePath(),
+        headless: true,
+        args: []
+      });
+    }
 
     const page = await browser.newPage();
     await page.setContent(buildPrintableDocument(parsed.html, parsed.pdfOptions), {

@@ -20,5 +20,7 @@ export function resolveBrowserExecutablePath(): string {
     return local;
   }
 
-  throw new Error("No Chrome or Edge executable found. Set PUPPETEER_EXECUTABLE_PATH in .env.local.");
+  throw new Error(
+    "No local Chrome or Edge executable found. Set PUPPETEER_EXECUTABLE_PATH in .env.local for local development."
+  );
 }
