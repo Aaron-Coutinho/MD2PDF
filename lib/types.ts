@@ -27,3 +27,5 @@ export const PdfRequestSchema = z.object({
   html: z.string(),
   pdfOptions: PdfOptionsSchema
 });
+
+export const PrintRequestSchema = PdfRequestSchema;

@@ -117,15 +117,21 @@ export default function HomePage() {
         throw new Error("Nothing to export.");
       }
 
-      const response = await fetch("/api/pdf", {
+      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+
+      if (!printWindow) {
+        throw new Error("Popup blocked. Allow popups to open the print view.");
+      }
+
+      printWindow.document.write("<!doctype html><title>Preparing PDF...</title><p style=\"font-family:Segoe UI,sans-serif;padding:16px;\">Preparing print view...</p>");
+      printWindow.document.close();
+
+      const response = await fetch("/api/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           html,
-          pdfOptions: {
-            pageSize: options.pageSize,
-            margin: options.margin
-          }
+          pdfOptions: { pageSize: options.pageSize, margin: options.margin }
         })
       });
 
@@ -134,13 +140,11 @@ export default function HomePage() {
         throw new Error(payload.error ?? "PDF generation failed.");
       }
 
-      const blob = await response.blob();
+      const printableHtml = await response.text();
+      const blob = new Blob([printableHtml], { type: "text/html" });
       const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = "converted.pdf";
-      anchor.click();
-      URL.revokeObjectURL(url);
+      printWindow.location.replace(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Export failed.");
     } finally {
