@@ -34,6 +34,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     await page.setContent(buildPrintableDocument(parsed.html, parsed.pdfOptions), {
       waitUntil: "networkidle0"
     });
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
 
     const pdfBytes = await page.pdf({
       format: parsed.pdfOptions.pageSize,

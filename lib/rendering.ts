@@ -23,8 +23,8 @@ const marginMap: Record<PdfOptions["margin"], string> = {
 
 let katexCssCache = "";
 let appCssCache = "";
+const katexFontCache = new Map<string, string>();
 const baseAttributes = (defaultSchema.attributes ?? {}) as AttributeMap;
-const KATEX_FONT_BASE = "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/fonts/";
 
 const sanitizeSchema: Schema = {
   ...defaultSchema,
@@ -134,7 +134,10 @@ function loadKatexCss(): string {
 
   const cssPath = path.join(process.cwd(), "node_modules", "katex", "dist", "katex.min.css");
   if (existsSync(cssPath)) {
-    katexCssCache = readFileSync(cssPath, "utf8").replaceAll("fonts/", KATEX_FONT_BASE);
+    katexCssCache = readFileSync(cssPath, "utf8").replace(
+      /url\(fonts\/([^)]+)\)/g,
+      (_match, filename: string) => `url(${getKatexFontDataUri(filename)})`
+    );
     return katexCssCache;
   }
 
@@ -155,6 +158,32 @@ function loadAppCss(): string {
 
   appCssCache = "";
   return appCssCache;
+}
+
+function getKatexFontDataUri(filename: string): string {
+  const cached = katexFontCache.get(filename);
+
+  if (cached) {
+    return cached;
+  }
+
+  const fontPath = path.join(process.cwd(), "node_modules", "katex", "dist", "fonts", filename);
+
+  if (!existsSync(fontPath)) {
+    return `fonts/${filename}`;
+  }
+
+  const extension = path.extname(filename).toLowerCase();
+  const mimeType =
+    extension === ".woff2"
+      ? "font/woff2"
+      : extension === ".woff"
+        ? "font/woff"
+        : "font/ttf";
+
+  const dataUri = `data:${mimeType};base64,${readFileSync(fontPath).toString("base64")}`;
+  katexFontCache.set(filename, dataUri);
+  return dataUri;
 }
 
 function printStyles(options: PdfOptions): string {
