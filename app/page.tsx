@@ -117,34 +117,40 @@ export default function HomePage() {
         throw new Error("Nothing to export.");
       }
 
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+      const targetName = `md2pdf-print-${Date.now()}`;
+      const printWindow = window.open("", targetName);
 
       if (!printWindow) {
         throw new Error("Popup blocked. Allow popups to open the print view.");
       }
 
-      printWindow.document.write("<!doctype html><title>Preparing PDF...</title><p style=\"font-family:Segoe UI,sans-serif;padding:16px;\">Preparing print view...</p>");
+      printWindow.document.write(
+        "<!doctype html><title>Preparing PDF...</title><p style=\"font-family:Segoe UI,sans-serif;padding:16px;\">Preparing print view...</p>"
+      );
       printWindow.document.close();
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/api/print";
+      form.target = targetName;
+      form.style.display = "none";
 
-      const response = await fetch("/api/print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          html,
-          pdfOptions: { pageSize: options.pageSize, margin: options.margin }
-        })
+      const htmlInput = document.createElement("input");
+      htmlInput.type = "hidden";
+      htmlInput.name = "html";
+      htmlInput.value = html;
+
+      const optionsInput = document.createElement("input");
+      optionsInput.type = "hidden";
+      optionsInput.name = "pdfOptions";
+      optionsInput.value = JSON.stringify({
+        pageSize: options.pageSize,
+        margin: options.margin
       });
 
-      if (!response.ok) {
-        const payload = await response.json();
-        throw new Error(payload.error ?? "PDF generation failed.");
-      }
-
-      const printableHtml = await response.text();
-      const blob = new Blob([printableHtml], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      printWindow.location.replace(url);
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      form.append(htmlInput, optionsInput);
+      document.body.append(form);
+      form.submit();
+      form.remove();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Export failed.");
     } finally {
