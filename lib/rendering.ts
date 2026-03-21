@@ -203,6 +203,9 @@ function printStyles(options: PdfOptions): string {
     .render-root {
       font-size: var(--render-font-scale, 1rem);
     }
+    .katex .katex-mathml {
+      display: none !important;
+    }
     .preview {
       min-height: auto;
       border: none;
