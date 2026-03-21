@@ -1,4 +1,4 @@
-﻿import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
@@ -21,9 +21,7 @@ const marginMap: Record<PdfOptions["margin"], string> = {
   wide: "24mm"
 };
 
-let katexCssCache = "";
 let appCssCache = "";
-const katexFontCache = new Map<string, string>();
 const baseAttributes = (defaultSchema.attributes ?? {}) as AttributeMap;
 
 const sanitizeSchema: Schema = {
@@ -87,10 +85,15 @@ export function buildPrintableDocument(contentHtml: string, options: PdfOptions,
   const printScript = autoPrint
     ? `
     <script>
-      window.addEventListener("load", () => {
+      window.addEventListener("load", async () => {
+        if (document.fonts?.ready) {
+          try {
+            await document.fonts.ready;
+          } catch {}
+        }
         setTimeout(() => {
           window.print();
-        }, 150);
+        }, 250);
       });
     </script>`
     : "";
@@ -100,7 +103,7 @@ export function buildPrintableDocument(contentHtml: string, options: PdfOptions,
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>${loadKatexCss()}</style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
     <style>${loadAppCss()}</style>
     <style>${printStyles(options)}</style>
   </head>
@@ -127,24 +130,6 @@ async function markdownToHtml(rawText: string): Promise<string> {
   return String(result);
 }
 
-function loadKatexCss(): string {
-  if (katexCssCache) {
-    return katexCssCache;
-  }
-
-  const cssPath = path.join(process.cwd(), "node_modules", "katex", "dist", "katex.min.css");
-  if (existsSync(cssPath)) {
-    katexCssCache = readFileSync(cssPath, "utf8").replace(
-      /url\(fonts\/([^)]+)\)/g,
-      (_match, filename: string) => `url(${getKatexFontDataUri(filename)})`
-    );
-    return katexCssCache;
-  }
-
-  katexCssCache = "";
-  return katexCssCache;
-}
-
 function loadAppCss(): string {
   if (appCssCache) {
     return appCssCache;
@@ -158,32 +143,6 @@ function loadAppCss(): string {
 
   appCssCache = "";
   return appCssCache;
-}
-
-function getKatexFontDataUri(filename: string): string {
-  const cached = katexFontCache.get(filename);
-
-  if (cached) {
-    return cached;
-  }
-
-  const fontPath = path.join(process.cwd(), "node_modules", "katex", "dist", "fonts", filename);
-
-  if (!existsSync(fontPath)) {
-    return `fonts/${filename}`;
-  }
-
-  const extension = path.extname(filename).toLowerCase();
-  const mimeType =
-    extension === ".woff2"
-      ? "font/woff2"
-      : extension === ".woff"
-        ? "font/woff"
-        : "font/ttf";
-
-  const dataUri = `data:${mimeType};base64,${readFileSync(fontPath).toString("base64")}`;
-  katexFontCache.set(filename, dataUri);
-  return dataUri;
 }
 
 function printStyles(options: PdfOptions): string {
@@ -204,7 +163,15 @@ function printStyles(options: PdfOptions): string {
       font-size: var(--render-font-scale, 1rem);
     }
     .katex .katex-mathml {
-      display: none !important;
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
     }
     .preview {
       min-height: auto;
