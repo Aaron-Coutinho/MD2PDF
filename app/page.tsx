@@ -260,9 +260,14 @@ export default function HomePage() {
             {isRendering ? "Rendering..." : "Refresh"}
           </button>
           <button type="button" className="primary" onClick={() => void exportPdf()} disabled={isBusy || isTooLarge}>
-            {isExporting ? "Exporting..." : "Export PDF"}
+            {isExporting ? "Preparing..." : "Print / Save as PDF"}
           </button>
         </div>
+
+        <p className="hint">
+          Opens the preview in a new tab, then the browser&apos;s Save as PDF dialog. This keeps the exported result
+          closer to the preview on deployment. Popups must be allowed.
+        </p>
 
         {isTooLarge ? <p className="error">Input exceeds 1 MB.</p> : null}
         {error ? <p className="error">{error}</p> : null}
@@ -281,7 +286,7 @@ export default function HomePage() {
           {isRendering ? "Rendering..." : "Refresh"}
         </button>
         <button type="button" className="primary" onClick={() => void exportPdf()} disabled={isBusy || isTooLarge}>
-          {isExporting ? "Exporting..." : "Export PDF"}
+          {isExporting ? "Preparing..." : "Print / Save as PDF"}
         </button>
       </div>
     </main>
