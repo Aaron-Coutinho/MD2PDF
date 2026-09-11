@@ -4,7 +4,8 @@ import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "reac
 import type { InputType, RenderOptions } from "@/lib/types";
 import { DEFAULT_RENDER_OPTIONS, MAX_INPUT_BYTES } from "@/lib/shared";
 
-const INITIAL_TEXT = `# Sample\n\nPaste markdown or plain text here. Math works too: $x^2 + y^2 = z^2$.`;
+const INITIAL_TEXT = `# Welcome to MD2PDF\n\nWrite Markdown on the left and see the formatted document here.\n\n- **Bold** and *italic* text\n- Inline math: $E = mc^2$`;
+const CONTENT_STORAGE_KEY = "md2pdf-content-v2";
 const encoder = new TextEncoder();
 
 function byteLength(value: string): number {
@@ -32,6 +33,8 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [isRendering, setIsRendering] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [editorWidth, setEditorWidth] = useState(50);
+  const [isDragging, setIsDragging] = useState(false);
   const latestPreviewKey = useRef("");
 
   const currentPreviewKey = getPreviewKey(rawText, inputType, options);
@@ -92,11 +95,52 @@ export default function HomePage() {
 
   useEffect(() => {
     document.body.dataset.theme = theme;
+    window.localStorage.setItem("md2pdf-theme", theme);
 
     return () => {
       delete document.body.dataset.theme;
     };
   }, [theme]);
+
+  useEffect(() => {
+    const savedText = window.localStorage.getItem(CONTENT_STORAGE_KEY);
+    const savedTheme = window.localStorage.getItem("md2pdf-theme");
+
+    if (savedText) {
+      setRawText(savedText);
+    }
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(CONTENT_STORAGE_KEY, rawText);
+  }, [rawText]);
+
+  useEffect(() => {
+    if (!isDragging) {
+      return;
+    }
+
+    function onPointerMove(event: PointerEvent): void {
+      const width = window.innerWidth;
+      const nextWidth = (event.clientX / width) * 100;
+      setEditorWidth(Math.min(70, Math.max(30, nextWidth)));
+    }
+
+    function onPointerUp(): void {
+      setIsDragging(false);
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [isDragging]);
 
   async function exportPdf(): Promise<void> {
     if (!rawText.trim()) {
@@ -182,113 +226,61 @@ export default function HomePage() {
     setError("");
   }
 
+  function downloadSource(extension: "md" | "txt"): void {
+    const blob = new Blob([rawText], {
+      type: extension === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8"
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `markdown-export.${extension}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
   const isBusy = isRendering || isExporting;
 
   return (
-    <main className="page-shell">
-      <section className="panel controls">
-        <div className="title-row">
-          <h1>MD2PDF</h1>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => setTheme((previous) => (previous === "light" ? "dark" : "light"))}
-            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
-          >
-            {theme === "light" ? "Dark mode" : "Light mode"}
-          </button>
-        </div>
-        <p>Simple markdown/text to PDF converter with math support.</p>
-
-        <label className="field">
-          <span>Input type</span>
-          <select value={inputType} onChange={(event) => setInputType(event.target.value as InputType)}>
-            <option value="markdown">Markdown</option>
-            <option value="text">Plain text</option>
-          </select>
-        </label>
-
-        <label className="field">
-          <span>Upload .md/.txt</span>
-          <input type="file" accept=".md,.txt,text/plain,text/markdown" onChange={onFileChange} />
-        </label>
-
-        <label className="field">
-          <span>Content</span>
-          <textarea value={rawText} onChange={(event) => setRawText(event.target.value)} rows={16} />
-        </label>
-
-        <div className="inline-fields">
-          <label className="field">
-            <span>Page size</span>
-            <select
-              value={options.pageSize}
-              onChange={(event) => setOptions((previous) => ({ ...previous, pageSize: event.target.value as RenderOptions["pageSize"] }))}
-            >
-              <option value="A4">A4</option>
-              <option value="Letter">Letter</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Margin</span>
-            <select
-              value={options.margin}
-              onChange={(event) => setOptions((previous) => ({ ...previous, margin: event.target.value as RenderOptions["margin"] }))}
-            >
-              <option value="narrow">Narrow</option>
-              <option value="normal">Normal</option>
-              <option value="wide">Wide</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Font scale ({options.fontScale.toFixed(2)})</span>
-            <input
-              type="range"
-              min={0.8}
-              max={1.4}
-              step={0.05}
-              value={options.fontScale}
-              onChange={(event) => setOptions((previous) => ({ ...previous, fontScale: Number(event.target.value) }))}
-            />
-          </label>
-        </div>
-
-        <div className="actions">
-          <button type="button" onClick={() => void refreshPreview()} disabled={isBusy || isTooLarge}>
-            {isRendering ? "Rendering..." : "Refresh"}
-          </button>
+    <main className={`editor-app${isDragging ? " is-dragging" : ""}`}>
+      <header className="toolbar">
+        <div className="brand"><span className="brand-mark">M</span><span>MD2PDF</span></div>
+        <span className="toolbar-status">{isRendering ? "Rendering preview..." : "Live preview"}</span>
+        <div className="toolbar-actions">
+          <label className="toolbar-file">Open file<input type="file" accept=".md,.txt,text/plain,text/markdown" onChange={onFileChange} /></label>
+          <button type="button" onClick={() => downloadSource("md")}>Download MD</button>
+          <button type="button" onClick={() => downloadSource("txt")}>Download TXT</button>
           <button type="button" className="primary" onClick={() => void exportPdf()} disabled={isBusy || isTooLarge}>
-            {isExporting ? "Preparing..." : "Print / Save as PDF"}
+            {isExporting ? "Preparing..." : "Save as PDF"}
+          </button>
+          <button type="button" className="icon-button" onClick={() => setTheme((previous) => (previous === "light" ? "dark" : "light"))} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} title="Toggle dark mode">
+            {theme === "light" ? "☾" : "☀"}
           </button>
         </div>
+      </header>
 
-        <p className="hint">
-          Opens the preview in a new tab, then the browser&apos;s Save as PDF dialog. This keeps the exported result
-          closer to the preview on deployment. Popups must be allowed.
-        </p>
-
-        {isTooLarge ? <p className="error">Input exceeds 1 MB.</p> : null}
-        {error ? <p className="error">{error}</p> : null}
+      <section className="workspace" style={{ gridTemplateColumns: `${editorWidth}% 8px minmax(0, 1fr)` }}>
+        <section className="editor-pane">
+          <div className="pane-heading"><span>Editor</span><span className="autosave">Saved locally</span></div>
+          <div className="editor-options">
+            <select aria-label="Input type" value={inputType} onChange={(event) => setInputType(event.target.value as InputType)}>
+              <option value="markdown">Markdown</option><option value="text">Plain text</option>
+            </select>
+            <select aria-label="Page size" value={options.pageSize} onChange={(event) => setOptions((previous) => ({ ...previous, pageSize: event.target.value as RenderOptions["pageSize"] }))}>
+              <option value="A4">A4</option><option value="Letter">Letter</option>
+            </select>
+            <select aria-label="Margin" value={options.margin} onChange={(event) => setOptions((previous) => ({ ...previous, margin: event.target.value as RenderOptions["margin"] }))}>
+              <option value="narrow">Narrow margin</option><option value="normal">Normal margin</option><option value="wide">Wide margin</option>
+            </select>
+          </div>
+          <textarea className="markdown-input" value={rawText} onChange={(event) => setRawText(event.target.value)} spellCheck={false} aria-label="Markdown editor" />
+          <div className="editor-footer"><span>{rawText.length.toLocaleString()} characters</span><label>Scale {options.fontScale.toFixed(2)}<input type="range" min={0.8} max={1.4} step={0.05} value={options.fontScale} onChange={(event) => setOptions((previous) => ({ ...previous, fontScale: Number(event.target.value) }))} /></label></div>
+        </section>
+        <button type="button" className="splitter" onPointerDown={() => setIsDragging(true)} aria-label="Resize editor and preview" title="Drag to resize"><span /></button>
+        <section className="preview-pane">
+          <div className="pane-heading"><span>Preview</span><button type="button" className="refresh-button" onClick={() => void refreshPreview()} disabled={isBusy || isTooLarge}>{isRendering ? "..." : "Refresh"}</button></div>
+          {isTooLarge || error ? <p className="error preview-error">{isTooLarge ? "Input exceeds 1 MB." : error}</p> : null}
+          <div className="preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+        </section>
       </section>
-
-      <section className="panel preview-panel">
-        <div className="preview-header">
-          <h2>Preview</h2>
-        </div>
-
-        <div className="preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-      </section>
-
-      <div className="floating-actions">
-        <button type="button" onClick={() => void refreshPreview()} disabled={isBusy || isTooLarge}>
-          {isRendering ? "Rendering..." : "Refresh"}
-        </button>
-        <button type="button" className="primary" onClick={() => void exportPdf()} disabled={isBusy || isTooLarge}>
-          {isExporting ? "Preparing..." : "Print / Save as PDF"}
-        </button>
-      </div>
     </main>
   );
 }
